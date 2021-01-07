@@ -1,5 +1,6 @@
-import java.io.*;
 import java.util.*;
+import java.io.*;
+import java.util.Map.*;
 
 import soot.G;
 import soot.Local;
@@ -7,12 +8,13 @@ import soot.Scene;
 import soot.SootClass;
 import soot.SootMethod;
 import soot.Unit;
+import soot.Value;
 import soot.ValueBox;
 import soot.options.Options;
+import soot.jimple.AssignStmt;
 import soot.jimple.JimpleBody;
 
 public class Tool {
-    public static String key;
 
     public static void setupSoot(String[] args){
         System.out.println("setting up soot..");
@@ -20,7 +22,6 @@ public class Tool {
         Options.v().set_prepend_classpath(true);
         Options.v().set_allow_phantom_refs(true);
         Options.v().set_soot_classpath("./tests");
-        // System.out.println(Scene.v().getSootClassPath());
 
         for(int i = 0; i < args.length; i++){
             Scene.v().addBasicClass(args[i]);
@@ -33,6 +34,40 @@ public class Tool {
         //     System.out.println(x.getName());
     }
 
+    public static void getLocalVariables(JimpleBody body, HashMap<String, LinkedList<String>> adj, ArrayList<String> localVars){
+        String local;
+        for (Local u : body.getLocals()) {
+            local = u.toString();
+            localVars.add(local);
+
+            LinkedList<String> l = new LinkedList<String>();
+            adj.put(local, l);
+        }
+        // System.out.println(localVars);
+        // System.out.println(adj);
+    }
+
+    public static void buildGraph(JimpleBody body, HashMap<String, LinkedList<String>> adj, ArrayList<String> localVars){
+        int line = 1;
+        for (Unit unit : body.getUnits()){
+            System.out.println("(" + line + ")" + unit.toString());
+            line++;
+            if(unit instanceof AssignStmt){
+                Value lhs = ((AssignStmt) unit).getLeftOp();
+                // System.out.println(lhs.toString());
+                Value rhs = ((AssignStmt) unit).getRightOp();
+                for(ValueBox vb : rhs.getUseBoxes()){
+                    String local = vb.getValue().toString();
+                    // System.out.println(vb.getValue().toString());
+                    if(localVars.contains(lhs.toString()) && localVars.contains(local))
+                        adj.get(lhs.toString()).add(local);
+                }
+            }
+        }
+        System.out.println("\nGRAPH OF LOCAL VARIABLES : ");
+        System.out.println(adj);
+    }
+
     public static void depthFirstSearch(HashMap<String, LinkedList<String>> adj, String local, String mainlocal, HashMap<String, Set<String>> depends){
         if(mainlocal == local){
             HashSet<String> l = new HashSet<String>();
@@ -42,49 +77,7 @@ public class Tool {
             depends.get(mainlocal).add(local);
 
         for(String i : adj.get(local))
-        depthFirstSearch(adj, i, mainlocal, depends);
-    }
-
-    public static Set<String> getLocalVariables(JimpleBody body, HashMap<String, LinkedList<String>> adj){
-        Set<String> localVars = new HashSet<String>();
-        for (Local u : body.getLocals()) {
-            String local = u.toString();
-            localVars.add(local);
-
-            LinkedList<String> l = new LinkedList<String>();
-            adj.put(local, l);
-        }
-        // System.out.println(localVars);
-        // System.out.println(adj);
-        return localVars;
-    }
-
-    public static void buildGraph(JimpleBody body, HashMap<String, LinkedList<String>> adj, Set<String> localVars){
-        int line = 1;
-        boolean isUse = true;
-        String localName;
-        System.out.println("\nJIMPLEBODY : ");
-        for (Unit u : body.getUnits()){
-            System.out.println("(" + line + ") " + u.toString());
-            for (ValueBox v : u.getUseAndDefBoxes()){
-                if(localVars.contains(v.getValue().toString())){
-                    localName = v.getValue().toString();
-                    if(isUse){
-                        key = localName;
-                        isUse = false;
-                    }
-                    else{
-                        LinkedList<String> l = adj.get(key);
-                        l.add(localName);
-                    }
-                    // System.out.println(localName);
-                }
-            }
-            line++;
-            isUse = true;
-        }
-        System.out.println("\nGRAPH OF LOCAL VARIABLES : ");
-        System.out.println(adj);
+            depthFirstSearch(adj, i, mainlocal, depends);
     }
 
     public static void main(String[] args){
@@ -94,11 +87,14 @@ public class Tool {
             SootMethod sm = sc.getMethodByName("main");
             JimpleBody body = (JimpleBody) sm.retrieveActiveBody();
 
-            HashMap<String, LinkedList<String>> adj = new HashMap<>();
-            Set<String> localVars = getLocalVariables(body, adj);
+            ArrayList<String> localVars = new ArrayList<String>();
+            HashMap<String, LinkedList<String>> adj = new HashMap<String, LinkedList<String>>();
+            HashMap<String, Set<String>> depends = new HashMap<String, Set<String>>();
+
+            getLocalVariables(body, adj, localVars);
+
             buildGraph(body, adj, localVars);
 
-            HashMap<String, Set<String>> depends = new HashMap<>();
             for(String local : localVars)
                 depthFirstSearch(adj, local, local, depends);
             System.out.println("\nDEPENDS : ");

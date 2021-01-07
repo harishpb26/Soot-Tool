@@ -84,6 +84,7 @@ public class Tool {
         setupSoot(args);
         for(int i = 0; i < args.length; i++){
             SootClass sc = Scene.v().getSootClass(args[i]);
+            System.out.println("\n" + sc.getName());
             SootMethod sm = sc.getMethodByName("main");
             JimpleBody body = (JimpleBody) sm.retrieveActiveBody();
 
